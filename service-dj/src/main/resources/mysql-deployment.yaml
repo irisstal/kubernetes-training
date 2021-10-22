@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms
+  labels:
+    app: mysql
+    tier: database
+spec:
+  ports:
+    - port: 3306
+      targetPort: 3306
+  selector:
+    app: mysql
+    tier: database
+  clusterIP: None
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pv-claim
+  labels:
+    app: mysql
+    tier: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: app/v1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+    tier: database
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+      tier: database
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          app: mysql
+          tier: database
+      spec:
+        containers:
+          - image: mysql
+            args:
+              - "--ignore-db-dir=lost+found"
+            name: mysql
+            env:
+              - name: MYSQL_ROOT_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: db-credentials
+                    key: password
+              - name: MYSQL_ROOT_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: username
+              - name: MYSQL_DATABASE #setting database from configmap
+                  valueFrom:
+                    configMapKeyRef:
+                      name: db-config
+                      key: name
+            ports:
+              - containerPort: 3306
+                name: mysql
+            volumeMounts: #Mounting volume obtained from PVC
+              - name: mysql-persistent-storage
+                mountPath: /var/lib/mysql #Path within container
+          volumes:
+            - name: mysql-persistent-storage #Obtaining volume from PVC
+              persistentVolumeClaim:
+                claimName: mysql-pv-claim
